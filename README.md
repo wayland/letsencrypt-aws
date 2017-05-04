@@ -62,7 +62,8 @@ environment variable. This should be a JSON object with the following schema:
                 "port": "optional, defaults to 443 (integer)"
             },
             "hosts": ["list of hosts you want on the certificate (strings)"],
-            "key_type": "rsa or ecdsa, optional, defaults to rsa (string)"
+            "key_type": "rsa or ecdsa, optional, defaults to rsa (string)",
+            "route53_type": "route53"
         }
     ],
     "acme_account_key": "location of the account private key (string)",
@@ -75,6 +76,11 @@ To specify a local file you provide `"file:///path/to/key.pem"` (on Windows use
 `"file://C:/path/to/key.pem"`), for S3 provide
 `"s3://bucket-name/object-name"`. The key should be a PEM formatted RSA private
 key.
+
+The `route53_type` should either be empty (to use the default AWS credentials) or
+set to `"route53"`, which means that the credentials used for route53 only are 
+drawn from the environment variable `AWS_ROUTE53_CREDENTIALS_FILE` instead of 
+`AWS_SHARED_CREDENTIALS_FILE` (which is still used for the rest).  
 
 Then you can simply run it: `python letsencrypt-aws.py update-certificates`.
 

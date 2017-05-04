@@ -489,12 +489,11 @@ def update_certificates(persistent=False, force_issue=False):
     if persistent and force_issue:
         raise ValueError("Can't specify both --persistent and --force-issue")
 
+    # Set up basic session, in case credentials are stored in S3
     session = boto3.Session()
     s3_client = session.client("s3")
-    elb_client = session.client("elb")
-    route53_client = session.client("route53")
-    iam_client = session.client("iam")
 
+    # Collect various config stuff
     config = json.loads(os.environ["LETSENCRYPT_AWS_CONFIG"])
     domains = config["domains"]
     acme_directory_url = config.get(
@@ -504,6 +503,25 @@ def update_certificates(persistent=False, force_issue=False):
     acme_client = setup_acme_client(
         s3_client, acme_directory_url, acme_account_key
     )
+
+    # Find appropriate credentials
+    creds_default = os.environ["AWS_SHARED_CREDENTIALS_FILE"]
+    try:
+        creds_route53 = os.environ["AWS_ROUTE53_CREDENTIALS_FILE"]
+    except KeyError:
+        creds_route53 = ''
+
+    # Set up other clients
+    elb_client = session.client("elb")
+    iam_client = session.client("iam")
+
+    # Set up route53 clients
+    route53_client_basic = session.client("route53")
+    if creds_route53:
+        os.environ["AWS_SHARED_CREDENTIALS_FILE"] = creds_route53
+        route53_session = boto3.Session()
+        route53_client_other = route53_session.client("route53")
+        os.environ["AWS_SHARED_CREDENTIALS_FILE"] = creds_default
 
     certificate_requests = []
     for domain in domains:
@@ -516,6 +534,16 @@ def update_certificates(persistent=False, force_issue=False):
             raise ValueError(
                 "Unknown certificate location: {!r}".format(domain)
             )
+
+        try:
+            if domain["Route53Type"] == 'route53':
+                if not route53_client_other:
+                    raise ValueError("Error: route53 creds requested, but not found")
+                route53_client = route53_client_other
+            else:
+                route53_client = route53_client_basic
+        except KeyError:
+            route53_client = route53_client_basic
 
         certificate_requests.append(CertificateRequest(
             cert_location,
